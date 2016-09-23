@@ -54,18 +54,17 @@ class Handler(webapp2.RequestHandler):
 
 class Index(Handler): #json parsing
     def render_index(self):
-        j = r'{"one": 1, "numbers": [1,2,3.5], "one": 2}' #r means raw and escapes any \ included
-        c = json.loads(j)
-        d = c['numbers']
-        h = c['one']
-
+        j = r'{"one": 1, "numbers": [1,2,3.5], "one": 2}' #(r means raw and escapes any \ included)
+        c = json.loads(j) #parse the raw json data
+        d = c['numbers'] #pull all data in the numbers key
+        h = c['one'] #pull all data in the one key
 
         self.render("index.html", p=j, c=c, d=d, h=h, s=j)
 
     def get(self):
         self.render_index()
 
-# class Index(Handler): #html parsing
+# class Index(Handler): #html parsing NOT DONE, LOOK AT UDACITY FOR RE HTML PARSING
 #     def render_index(self):
 #         url = urllib2.urlopen("http://www.fangraphs.com/projections.aspx?pos=all&stats=bat&type=steamer") #create a file object of the url
 #         content = url.read() #read the contents of the file (either html or xml data)
