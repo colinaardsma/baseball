@@ -1,7 +1,11 @@
-import os, webapp2, math, re #import stock python methods (re is regular expersions)
+import os, webapp2, math, re, json #import stock python methods (re is regular expersions)
 import jinja2 #need to install jinja2 (not stock)
-import hashing, gqlqueries, validuser #import python files I've made
+import hashing, gqlqueries, validuser, websitePull, caching #import python files I've made
 from dbmodels import Users, Blog #import Users and Blog classes from python file named dbmodels
+import time
+
+
+#caching is messed up for users/usernames, update from blog
 
 #setup jinja2
 template_dir = os.path.join(os.path.dirname(__file__), 'templates') #set template_dir to main.py dir(current dir)/templates
@@ -39,7 +43,9 @@ class Handler(webapp2.RequestHandler):
 
 class Main(Handler):
     def render_main(self):
-        self.render("main.html")
+        url = "http://www.fantasypros.com/mlb/projections/hitters.php"
+        statTable = websitePull.pull_data(url)
+        self.render("main.html", statTable=statTable)
 
     def get(self):
         self.render_main()

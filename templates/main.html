@@ -1,5 +1,7 @@
 {%- extends "layout.html" -%}
 {%- block content -%}
-<p>hello</p>
-
+<p>{{statTable}}</p>
+{%- if page %}
+{%- include "navigation.html" -%}
+{%- endif -%}
 {%- endblock -%}

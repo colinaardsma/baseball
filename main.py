@@ -1,7 +1,8 @@
-import os, webapp2, math, re #import stock python methods (re is regular expersions)
+import os, webapp2, math, re, json #import stock python methods (re is regular expersions)
 import jinja2 #need to install jinja2 (not stock)
-import hashing, gqlqueries, validuser #import python files I've made
+import hashing, gqlqueries, validuser, coordinateRetrieval, caching #import python files I've made
 from dbmodels import Users, Blog #import Users and Blog classes from python file named dbmodels
+import time
 
 #setup jinja2
 template_dir = os.path.join(os.path.dirname(__file__), 'templates') #set template_dir to main.py dir(current dir)/templates
@@ -38,11 +39,13 @@ class Handler(webapp2.RequestHandler):
             self.redirect('/login')
 
 class PostList(Handler): # if u has value then posts will be displayed by user, else all posts are displayed
+    limit = 5 #number of entries displayed per page
+
     def render_list(self, u, page="", blogs=""):
         c = self.request.cookies.get('user') #pull cookie value
         usr = hashing.get_user_from_cookie(c)
         if u:
-            poster = gqlqueries.get_user_by_name(u) #pulls the user from the db by name passed through the url
+            poster = caching.cached_user_by_name(u) #pulls the user from the db by name passed through the url
         else:
             poster = ""
 
@@ -51,12 +54,11 @@ class PostList(Handler): # if u has value then posts will be displayed by user, 
             page = 1
         else:
             page = int(page)
-        limit = 5 #number of entries displayed per page
         offset = (page - 1) * 5 #calculate where to start offset based on which page the user is on
 
-        blogs = gqlqueries.get_posts(limit, offset, poster)
-        allPosts = gqlqueries.get_posts(None, 0, poster)
-        lastPage = math.ceil(len(allPosts) / float(limit)) #calculate the last page required based on the number of entries and entries displayed per page
+        blogs = caching.cached_posts(self.limit, offset, poster)
+        allPosts = caching.cached_posts(None, 0, poster)
+        lastPage = math.ceil(len(allPosts) / float(self.limit)) #calculate the last page required based on the number of entries and entries displayed per page
         self.render("list.html", blogs=blogs, page=page, lastPage=lastPage, usr=usr, u=u)
 
     def get(self, u=""):
@@ -71,7 +73,7 @@ class Archive(Handler):
         c = self.request.cookies.get('user') #pull cookie value
         usr = hashing.get_user_from_cookie(c)
 
-        blogs = gqlqueries.get_posts() #call get_posts to run GQL query
+        blogs = caching.cached_posts() #call get_posts to run GQL query
         self.render("list.html", blogs=blogs, usr=usr)
 
     def get(self):
@@ -87,12 +89,45 @@ class NewPost(Handler):
         self.render_post()
 
     def post(self):
+        c = self.request.cookies.get('user') #pull cookie value
+        usr = hashing.get_user_from_cookie(c)
+
         title = self.request.get("title")
         body = self.request.get("body")
 
         if title and body:
             post = Blog(title = title, body = body, author = self.user) #create new blog object named post
+            coords = coordinateRetrieval.get_coords(self.request.remote_addr) #pull coordinates based on IP of poster
+            if coords:
+                post.coords = coords #if we have coordinates, add them to the db entry
             post.put() #store post in database
+
+            """cache updating"""
+            #update cache
+            time.sleep(.1) #ewait 1/10 of a second while post is entered into db
+            poster = caching.cached_user_by_name(post.author.username) #pulls the user from the db by name passed through the url
+            caching.cached_posts(None, 0, poster, True) #direct cached_posts to update cache
+            caching.cached_posts(None, 0, "", True) #direct cached_posts to update cache
+
+            limit = PostList.limit #number of entries displayed per page
+
+            #update cache of pagination by user
+            allPostsByPoster = caching.cached_posts(None, 0, poster)
+            lastPageByPoster = math.ceil(len(allPostsByPoster) / float(limit)) #calculate the last page required based on the number of entries and entries displayed per page
+
+            for i in range(int(lastPageByPoster), 0, -1):
+                offset = (i - 1) * 5
+                caching.cached_posts(limit, offset, poster, True) #direct cached_posts to update cache
+
+            #update cache of pagination for all posts
+            allPosts = caching.cached_posts(None, 0, "")
+            lastPage = math.ceil(len(allPosts) / float(limit)) #calculate the last page required based on the number of entries and entries displayed per page
+
+            for i in range(int(lastPage), 0, -1):
+                offset = (i - 1) * 5
+                caching.cached_posts(limit, offset, "", True) #direct cached_posts to update cache
+            """end of cache updating"""
+
             blogID = "/post/%s" % str(post.key().id())
             self.redirect(blogID) #send you to view post page
         else:
@@ -103,8 +138,8 @@ class ModifyPost(Handler):
     def render_modify(self, blogs=""):
         c = self.request.cookies.get('user') #pull cookie value
         usr = hashing.get_user_from_cookie(c)
-        poster = gqlqueries.get_user_by_name(usr) #pulls the user from the db by name passed through the url
-        blogs = gqlqueries.get_posts(None, 0, poster) #call get_posts to run GQL query
+        poster = caching.cached_user_by_name(usr) #pulls the user from the db by name passed through the url
+        blogs = caching.cached_posts(None, 0, poster) #call get_posts to run GQL query
         self.render("modify_post.html", blogs=blogs, usr=usr)
 
     def get(self):
@@ -200,7 +235,7 @@ class Registration(Handler):
         elif not validuser.valid_username(username): #check if username if valid
             usernameError = "Invalid Username"
             error = True
-        elif gqlqueries.check_username(username): #check if username is unique
+        elif caching.cached_check_username(username): #check if username is unique
             usernameError = "That username is taken"
             error = True
         else:
@@ -221,6 +256,8 @@ class Registration(Handler):
             user.put() #store post in database
             user_id = user.key().id()
             self.response.headers.add_header('Set-Cookie', 'user=%s' % hashing.make_secure_val(user_id)) #hash user id for use in cookie
+            caching.cached_user_by_name(username, True) #direct cached_posts to update cache
+            caching.cached_check_username(username, True) #direct cached_posts to update cache
             self.redirect('/welcome')
         else:
             self.render_reg(username, email, usernameError, passwordError, passVerifyError, emailError)
@@ -236,10 +273,10 @@ class Login(Handler):
         username = self.request.get("username")
         password = self.request.get("password")
 
-        if not gqlqueries.check_username(username):
+        if not caching.cached_check_username(username):
             error = "Invalid login"
         else:
-            user_id = gqlqueries.check_username(username)
+            user_id = caching.cached_check_username(username)
             user_id = int(user_id)
             u = Users.get_by_id(user_id)
             p = u.password
@@ -271,24 +308,76 @@ class Welcome(Handler):
     def get(self):
         self.render_welcome()
 
+class Map(Handler):
+    def render_map(self):
+        c = self.request.cookies.get('user') #pull cookie value
+        usr = hashing.get_user_from_cookie(c)
+
+        blogs = caching.cached_posts()
+        # arts = list(arts) #turns the db query above into a list object so that it doesnt run a new db search each time it is called
+
+        points = []
+        for b in blogs: #find which arts have coords
+            points.append(b.coords) #if we have any arts coords, make an image url
+
+        mapUrl = coordinateRetrieval.getMap(points)
+
+        self.render("map.html", usr=usr, mapUrl=mapUrl)
+
+    def get(self):
+        self.render_map()
+
+class jsonHandler(Handler):
+    def render_json(self, post_id=""):
+        if post_id: #if a single post is requested fetch by ID
+            post_id = int(post_id) #post_id is stored as a string initially and will need to be tested against an int in view.html
+            post = Blog.get_by_id(post_id)
+            jsonData = {} #establish reusable blogData dictionary
+            jsonData["title"] = post.title #add title to dictionary
+            jsonData["body"] = post.body #add body to dictionary
+            jsonData["created"] = post.created.strftime('%m.%d.%Y') #add created date to dictionary and format
+            jsonData["last_modified"] = post.last_modified.strftime('%m.%d.%Y') #add modified date to dictionary and format
+            jsonData["author"] = post.author.username #add author to dictionary
+        else: #if entire blog is requested iterate through database
+            jsonData = [] #establish jsonData list
+            blogs = caching.cached_posts() #call get_posts to run GQL query
+            for b in blogs:
+                blogData = {} #establish reusable blogData dictionary
+                blogData["title"] = b.title #add title to dictionary
+                blogData["body"] = b.body #add body to dictionary
+                blogData["created"] = b.created.strftime('%m.%d.%Y') #add created date to dictionary and format
+                blogData["last_modified"] = b.last_modified.strftime('%m.%d.%Y') #add modified date to dictionary and format
+                blogData["author"] = b.author.username #add author to dictionary
+                jsonData.append(blogData) #add dictionary to list
+        self.response.headers['Content-Type'] = 'application/json; charset=UTF-8' #set content-type to json and charset to UTF-8
+        self.write(json.dumps(jsonData)) #write json data to page
+
+    def get(self, post_id=""):
+        self.render_json(post_id)
+
 app = webapp2.WSGIApplication([
     ('/', PostList),
     webapp2.Route('/user/<u:[a-zA-Z0-9_-]{3,20}>', PostList),
-    ('/archive', Archive),
-    ('/new_post', NewPost),
-    ('/modify_post', ModifyPost),
+    ('/archive/?', Archive),
+    ('/new_post/?', NewPost),
+    ('/modify_post/?', ModifyPost),
     webapp2.Route('/post/<post_id:\d+>', ViewPost),
     webapp2.Route('/post/<post_id:\d+>/edit', EditPost),
     webapp2.Route('/post/<post_id:\d+>/delete', DeletePost),
-    ('/registration', Registration),
-    ('/login', Login),
-    ('/logout', Logout),
-    ('/welcome', Welcome)
+    ('/registration/?', Registration),
+    ('/login/?', Login),
+    ('/logout/?', Logout),
+    ('/welcome/?', Welcome),
+    ('/map/?', Map),
+    ('/.json', jsonHandler),
+    webapp2.Route('/post/<post_id:\d+>.json', jsonHandler)
 ], debug=True)
 
 auth_paths = [ #must be logged in to access these links
     '/new_post',
+    '/new_post/',
     '/modify_post',
+    '/modify_post/',
     '/post/<post_id:\d+>/edit',
     '/post/<post_id:\d+>/delete'
 ]
