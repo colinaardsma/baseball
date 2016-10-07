@@ -37,129 +37,12 @@ class Handler(webapp2.RequestHandler):
         if not self.user and self.request.path in auth_paths:
             self.redirect('/login')
 
-class PostList(Handler): # if u has value then posts will be displayed by user, else all posts are displayed
-    def render_list(self, u, page="", blogs=""):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-        if u:
-            poster = gqlqueries.get_user_by_name(u) #pulls the user from the db by name passed through the url
-        else:
-            poster = ""
-
-        page = self.request.get("page") #pull url query string
-        if not page:
-            page = 1
-        else:
-            page = int(page)
-        limit = 5 #number of entries displayed per page
-        offset = (page - 1) * 5 #calculate where to start offset based on which page the user is on
-
-        blogs = gqlqueries.get_posts(limit, offset, poster)
-        allPosts = gqlqueries.get_posts(None, 0, poster)
-        lastPage = math.ceil(len(allPosts) / float(limit)) #calculate the last page required based on the number of entries and entries displayed per page
-        self.render("list.html", blogs=blogs, page=page, lastPage=lastPage, usr=usr, u=u)
-
-    def get(self, u=""):
-        page = self.request.get("page") #set url query string
-        if u:
-            self.render_list(u, page)
-        else:
-            self.render_list(None, page)
-
-class Archive(Handler):
-    def render_archive(self, blogs=""):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-
-        blogs = gqlqueries.get_posts() #call get_posts to run GQL query
-        self.render("list.html", blogs=blogs, usr=usr)
+class Main(Handler):
+    def render_main(self):
+        self.render("main.html")
 
     def get(self):
-        self.render_archive()
-
-class NewPost(Handler):
-    def render_post(self, title="", body="", error=""):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-        self.render("post.html", title=title, body=body, error=error, usr=usr)
-
-    def get(self):
-        self.render_post()
-
-    def post(self):
-        title = self.request.get("title")
-        body = self.request.get("body")
-
-        if title and body:
-            post = Blog(title = title, body = body, author = self.user) #create new blog object named post
-            post.put() #store post in database
-            blogID = "/post/%s" % str(post.key().id())
-            self.redirect(blogID) #send you to view post page
-        else:
-            error = "Please enter both title and body!"
-            self.render_post(title, body, error)
-
-class ModifyPost(Handler):
-    def render_modify(self, blogs=""):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-        poster = gqlqueries.get_user_by_name(usr) #pulls the user from the db by name passed through the url
-        blogs = gqlqueries.get_posts(None, 0, poster) #call get_posts to run GQL query
-        self.render("modify_post.html", blogs=blogs, usr=usr)
-
-    def get(self):
-        self.render_modify()
-
-class ViewPost(Handler):
-    def render_view(self, post_id):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-
-        post_id = int(post_id) #post_id is stored as a string initially and will need to be tested against an int in view.html
-        post = Blog.get_by_id(post_id)
-        self.render("view.html", post=post, post_id=post_id, usr=usr)
-
-    def get(self, post_id):
-        self.render_view(post_id)
-
-class EditPost(Handler):
-    def render_post(self, post_id, title="", body="", error=""):
-        c = self.request.cookies.get('user') #pull cookie value
-        usr = hashing.get_user_from_cookie(c)
-        post_id = int(post_id) #post_id is stored as a string initially and will need to be tested against an int in view.html
-        post = Blog.get_by_id(post_id) #retrieve row entry from Blog database based on id# in post_id and name it post
-        title = post.title #get title of post
-        body = post.body #get body of post
-        self.render("edit_post.html", post=post, post_id=post_id, title=title, body=body, error=error, usr=usr)
-
-    def get(self, post_id):
-        self.render_post(post_id)
-
-    def post(self, post_id, title="", body="", error=""):
-        title = self.request.get("title")
-        body = self.request.get("body")
-
-        if title and body:
-            post_id = int(post_id) #post_id is stored as a string initially and will need to be tested against an int in view.html
-            post = Blog.get_by_id(post_id) #retrieve row entry from Blog database based on id# in post_id and name it post
-            post.title = title #update post title
-            post.body = body #update post body
-            post.put() #uopdate post in database (will update modified datetime but not created datetime)
-            blogID = "/post/%s" % str(post_id)
-            self.redirect(blogID) #sends you to view post page
-        else:
-            error = "Please enter both title and body!"
-            self.render_post(post_id, title, body, error)
-
-class DeletePost(Handler):
-    def render_view(self, post_id):
-        post_id = int(post_id) #post_id is stored as a string initially and will need to be tested against an int in view.html
-        post = Blog.get_by_id(post_id) #retrieve row entry from Blog database based on id# in post_id and name it post
-        post.delete() #remove row entry post from Blog database
-        self.redirect("/")
-
-    def get(self, post_id):
-        self.render_view(post_id)
+        self.render_main()
 
 class Registration(Handler):
     def render_reg(self, username="", email="", usernameError="", passwordError="", passVerifyError="", emailError=""):
@@ -272,14 +155,7 @@ class Welcome(Handler):
         self.render_welcome()
 
 app = webapp2.WSGIApplication([
-    ('/', PostList),
-    webapp2.Route('/user/<u:[a-zA-Z0-9_-]{3,20}>', PostList),
-    ('/archive', Archive),
-    ('/new_post', NewPost),
-    ('/modify_post', ModifyPost),
-    webapp2.Route('/post/<post_id:\d+>', ViewPost),
-    webapp2.Route('/post/<post_id:\d+>/edit', EditPost),
-    webapp2.Route('/post/<post_id:\d+>/delete', DeletePost),
+    ('/', Main),
     ('/registration', Registration),
     ('/login', Login),
     ('/logout', Logout),

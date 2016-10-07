@@ -28,7 +28,28 @@ public class WebsitePull {
 					if (small.isEmpty()) {
 						continue;
 					}
-					System.out.println(small.get(0).text() + "," + a.get(0).text() + "," + a.get(1).text() + "," + a.get(2).text() + "\t | " + tds.get(1).text() + " | " + tds.get(2).text() + " | " + tds.get(3).text() + " | " + tds.get(4).text() + " | " + tds.get(5).text() + " | " + tds.get(6).text() + " | " + tds.get(7).text() + " | " + tds.get(8).text() + " | " + tds.get(9).text() + " | " + tds.get(10).text() + " | " + tds.get(11).text() + " | " + tds.get(12).text() + " | " + tds.get(13).text() + " | " + tds.get(14).text() + " | " + tds.get(15).text() + " | " + tds.get(16).text());
+					String[] posPull = small.get(0).text().split(" - ");
+					posPull[1] = posPull[1].replaceAll("[,]", "/");
+					String pos = posPull[1].replaceAll("[)(]", "");
+					String name = a.get(0).text();
+					String team = a.get(1).text();
+					int ab = Integer.parseInt(tds.get(1).text());
+					int r = Integer.parseInt(tds.get(2).text());
+					int hr = Integer.parseInt(tds.get(3).text());
+					int rbi = Integer.parseInt(tds.get(4).text());
+					int sb = Integer.parseInt(tds.get(5).text());
+					double avg = Double.parseDouble(tds.get(6).text());
+					double obp = Double.parseDouble(tds.get(7).text());
+					int h = Integer.parseInt(tds.get(8).text());
+					int dbl = Integer.parseInt(tds.get(9).text());
+					int triple = Integer.parseInt(tds.get(10).text());
+					int bb = Integer.parseInt(tds.get(11).text());
+					int k = Integer.parseInt(tds.get(12).text());
+					double slg = Double.parseDouble(tds.get(13).text());
+					double ops = Double.parseDouble(tds.get(14).text());
+					
+					System.out.println(name + "," + team + "," + pos + "," + ab + "," + r + "," + hr + "," + rbi + "," + sb + "," + avg + "," + obp + "," + h + "," + dbl + "," + triple + "," + bb + "," + k + "," + slg + "," + ops);
+					
 				}
 
 			}
