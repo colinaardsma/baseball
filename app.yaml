@@ -9,16 +9,24 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
+<<<<<<< HEAD
 - url: /styles
   static_dir: styles
 
 - url: .*
   script: main2.app
+=======
+- url: .*
+  script: main.app
+>>>>>>> a1fd41f02efc81c747563b068caac7cc88948f3b
 
 libraries:
 - name: webapp2
   version: latest
 - name: jinja2
   version: latest
+<<<<<<< HEAD
 - name: lxml
   version: latest
+=======
+>>>>>>> a1fd41f02efc81c747563b068caac7cc88948f3b
